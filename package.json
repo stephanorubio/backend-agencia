@@ -4,7 +4,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "generate": "prisma generate"
+    "build": "npm install && npx prisma generate"
   },
   "dependencies": {
     "cors": "^2.8.5",
