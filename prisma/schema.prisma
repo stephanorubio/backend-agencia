@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+  // Esto ayuda a reducir memoria en la generaciè´—n
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agency {
+  id        String   @id @default(uuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  users     User[]
+  clients   Client[]
+  wallet    Wallet?
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      String   @default("AGENCY_ADMIN")
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  balance   Decimal  @default(0.00)
+  agencyId  String   @unique
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+}
+
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  contactName String?
+  email       String?
+  adAccountId String?
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
+  createdAt   DateTime @default(now())
+}
