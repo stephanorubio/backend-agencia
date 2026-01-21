@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  // Esto ayuda a reducir memoria en la generaci«Ñn
+  // Esto ayuda a reducir memoria en la generaciÂÂ«Ã‘n
   engineType = "binary"
 }
 
@@ -12,6 +12,7 @@ datasource db {
 model Agency {
   id        String   @id @default(uuid())
   name      String
+  logo      String?  @db.Text  
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   users     User[]
