@@ -83,13 +83,26 @@ app.get('/api/me', verifyToken, async (req, res) => {
 });
 
 // --- MÓDULO CLIENTES ---
-app.post('/api/clients', verifyToken, async (req, res) => {
+// --- RUTA: OBTENER CLIENTES (Con soporte para Modo Dios) ---
+app.get('/api/clients', verifyToken, async (req, res) => {
     try {
-        const newClient = await prisma.client.create({
-            data: { ...req.body, agencyId: req.user.agencyId }
+        // Por defecto, buscamos los clientes de la agencia del usuario logueado
+        let targetAgencyId = req.user.agencyId;
+
+        // PERO, si el usuario es SUPER_ADMIN y pide ver otra agencia (query params), se lo permitimos
+        if (req.user.role === 'SUPER_ADMIN' && req.query.agencyId) {
+            targetAgencyId = req.query.agencyId;
+        }
+
+        const clients = await prisma.client.findMany({
+            where: { agencyId: targetAgencyId },
+            orderBy: { createdAt: 'desc' }
         });
-        res.json({ message: 'Cliente creado', client: newClient });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+        
+        res.json(clients);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/clients', verifyToken, async (req, res) => {
