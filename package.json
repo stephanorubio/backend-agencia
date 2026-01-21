@@ -2,9 +2,9 @@
   "name": "sistema-agencias",
   "version": "1.0.0",
   "main": "app.js",
-  "scripts": {
+ "scripts": {
     "start": "node app.js",
-    "build": "npm install && npx prisma generate"
+    "postinstall": "prisma generate"  <-- ¡ESTA LÍNEA ES LA CLAVE!
   },
   "dependencies": {
     "cors": "^2.8.5",
