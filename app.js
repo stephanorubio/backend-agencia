@@ -145,21 +145,20 @@ app.put('/api/clients/:id', verifyToken, async (req, res) => {
 });
 
 // --- RUTA: ELIMINAR CLIENTE (DELETE) ---
-app.delete('/api/clients/:id', verifyToken, async (req, res) => {
+// RUTA: ELIMINAR AGENCIA (DELETE) - Solo Super Admin
+app.delete('/api/admin/agencies/:id', verifySuperAdmin, async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // Primero borramos clientes y usuarios asociados para no romper la base de datos (Integridad referencial)
+        await prisma.client.deleteMany({ where: { agencyId: id } });
+        await prisma.user.deleteMany({ where: { agencyId: id } });
+        await prisma.wallet.deleteMany({ where: { agencyId: id } });
+        
+        // Finalmente borramos la agencia
+        await prisma.agency.delete({ where: { id } });
 
-        const existingClient = await prisma.client.findFirst({
-            where: { id: id, agencyId: req.user.agencyId }
-        });
-
-        if (!existingClient) {
-            return res.status(404).json({ error: 'Cliente no encontrado o no tienes permiso.' });
-        }
-
-        await prisma.client.delete({ where: { id: id } });
-
-        res.json({ message: 'Cliente eliminado correctamente' });
+        res.json({ message: 'Agencia y todos sus datos eliminados permanentemente.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
