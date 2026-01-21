@@ -36,16 +36,42 @@ app.post('/api/register', async (req, res) => {
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// --- RUTA: LOGIN (CON DATOS DE ROL) ---
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        // 1. Buscar usuario
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).json({ error: 'Credenciales inválidas' });
-        }
-        const token = jwt.sign({ userId: user.id, agencyId: user.agencyId }, SECRET_KEY, { expiresIn: '24h' });
-        res.json({ message: 'Bienvenido', token });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+        if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+        // 2. Verificar contraseña
+        const validPass = await bcrypt.compare(password, user.password);
+        if (!validPass) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+        // 3. Generar Token
+        const token = jwt.sign(
+            { id: user.id, email: user.email, role: user.role, agencyId: user.agencyId },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        // 4. RESPONDER (¡AQUÍ ESTABA EL FALLO!)
+        // Ahora enviamos el objeto 'user' completo para que el frontend pueda leer el 'role'
+        res.json({
+            message: 'Bienvenido',
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role, // <--- ESTO ES LO QUE FALTABA
+                agencyId: user.agencyId
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/me', verifyToken, async (req, res) => {
