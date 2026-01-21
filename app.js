@@ -80,5 +80,49 @@ function verifyToken(req, res, next) {
         next();
     });
 }
+// --- RUTA: EDITAR CLIENTE (PUT) ---
+app.put('/api/clients/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params; 
+        const { name, contactName, email, adAccountId } = req.body;
 
+        const existingClient = await prisma.client.findFirst({
+            where: { id: id, agencyId: req.user.agencyId }
+        });
+
+        if (!existingClient) {
+            return res.status(404).json({ error: 'Cliente no encontrado o no tienes permiso.' });
+        }
+
+        const updatedClient = await prisma.client.update({
+            where: { id: id },
+            data: { name, contactName, email, adAccountId }
+        });
+
+        res.json({ message: 'Cliente actualizado', client: updatedClient });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- RUTA: ELIMINAR CLIENTE (DELETE) ---
+app.delete('/api/clients/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const existingClient = await prisma.client.findFirst({
+            where: { id: id, agencyId: req.user.agencyId }
+        });
+
+        if (!existingClient) {
+            return res.status(404).json({ error: 'Cliente no encontrado o no tienes permiso.' });
+        }
+
+        await prisma.client.delete({ where: { id: id } });
+
+        res.json({ message: 'Cliente eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 app.listen(PORT, () => console.log(`Server listo en puerto ${PORT}`));
