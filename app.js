@@ -125,4 +125,65 @@ app.delete('/api/clients/:id', verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// ==========================================
+//  ZONA SUPER ADMIN (SAAS MASTER)
+// ==========================================
+
+// Middleware para proteger rutas de Super Admin
+const verifySuperAdmin = async (req, res, next) => {
+    // Primero verificamos que sea usuario válido
+    verifyToken(req, res, async () => {
+        // Segundo: Verificamos que tenga el rol especial
+        if (req.user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Acceso denegado. Se requiere Nivel Dios.' });
+        }
+        next();
+    });
+};
+
+// RUTA: VER TODAS LAS AGENCIAS (Para el dueño del SaaS)
+app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
+    try {
+        const agencies = await prisma.agency.findMany({
+            include: { 
+                users: { select: { email: true } }, // Traer email del dueño
+                clients: true, // Traer sus clientes para saber si usan el sistema
+                wallet: true   // Traer su saldo
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        
+        // Formateamos la data para que el frontend no sufra
+        const data = agencies.map(agency => ({
+            id: agency.id,
+            name: agency.name,
+            ownerEmail: agency.users[0]?.email || 'Sin Dueño',
+            totalClients: agency.clients.length,
+            balance: agency.wallet ? agency.wallet.balance : 0,
+            active: agency.active,
+            createdAt: agency.createdAt
+        }));
+
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// RUTA: BANEAR O ACTIVAR AGENCIA (Interruptor de apagado)
+app.put('/api/admin/agencies/:id/toggle', verifySuperAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const agency = await prisma.agency.findUnique({ where: { id } });
+        
+        const updated = await prisma.agency.update({
+            where: { id },
+            data: { active: !agency.active } // Invertir estado (Si es true -> false)
+        });
+
+        res.json({ message: `Agencia ${updated.active ? 'ACTIVADA' : 'SUSPENDIDA'}`, agency: updated });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 app.listen(PORT, () => console.log(`Server listo en puerto ${PORT}`));
