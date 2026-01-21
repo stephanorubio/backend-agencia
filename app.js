@@ -268,6 +268,40 @@ app.delete('/api/admin/agencies/:id', verifySuperAdmin, async (req, res) => {
     }
 });
 
+// --- RUTA: SUBIR LOGO DE AGENCIA ---
+// Recibe una imagen en Base64 y la guarda en la agencia
+app.put('/api/agency/logo', verifyToken, async (req, res) => {
+    try {
+        const { logoBase64 } = req.body;
+        
+        // Validacion simple: Que no sea una cadena vacia
+        if (!logoBase64) return res.status(400).json({ error: 'Falta la imagen' });
+
+        // Guardamos en la BD
+        const updatedAgency = await prisma.agency.update({
+            where: { id: req.user.agencyId },
+            data: { logo: logoBase64 }
+        });
+
+        res.json({ message: 'Logo actualizado', logo: updatedAgency.logo });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al guardar el logo (quizás es muy pesado)' });
+    }
+});
+
+// --- RUTA: OBTENER MI AGENCIA (Para ver el logo al entrar) ---
+app.get('/api/agency/me', verifyToken, async (req, res) => {
+    try {
+        const agency = await prisma.agency.findUnique({
+            where: { id: req.user.agencyId },
+            select: { id: true, name: true, logo: true, active: true } // Solo datos seguros
+        });
+        res.json(agency);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
