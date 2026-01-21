@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
 const cors = require('cors');
+const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -10,61 +10,61 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET;
 
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-// --- RUTA DE VERIFICACIÓN ---
-app.get('/', (req, res) => res.send('<h1>Sistema SaaS ONLINE 🟢</h1>'));
+// --- MIDDLEWARE DE SEGURIDAD ---
+const verifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
-// --- MÓDULO AUTH ---
-app.post('/api/register', async (req, res) => {
-    try {
-        const { agencyName, email, password } = req.body;
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) return res.status(400).json({ error: 'El usuario ya existe' });
+    if (!token) return res.status(403).json({ error: 'Token requerido' });
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await prisma.agency.create({
-            data: {
-                name: agencyName,
-                wallet: { create: { balance: 0.00 } },
-                users: { create: { email, password: hashedPassword, role: 'AGENCY_ADMIN' } }
-            },
-            include: { users: true }
-        });
-        res.json({ message: 'Agencia registrada', agencyId: result.id });
-    } catch (error) { res.status(500).json({ error: error.message }); }
-});
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Token inválido' });
+        req.user = user;
+        next();
+    });
+};
 
-// --- RUTA: LOGIN (CON DATOS DE ROL) ---
+const verifySuperAdmin = (req, res, next) => {
+    verifyToken(req, res, () => {
+        if (req.user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Acceso Denegado: Se requiere Nivel Super Admin.' });
+        }
+        next();
+    });
+};
+
+// ==========================================
+//  RUTAS DE AUTENTICACIÓN
+// ==========================================
+
+// LOGIN (Corregido para enviar ROL)
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // 1. Buscar usuario
         const user = await prisma.user.findUnique({ where: { email } });
+
         if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        // 2. Verificar contraseña
         const validPass = await bcrypt.compare(password, user.password);
         if (!validPass) return res.status(401).json({ error: 'Contraseña incorrecta' });
 
-        // 3. Generar Token
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role, agencyId: user.agencyId },
-            process.env.JWT_SECRET,
+            SECRET_KEY,
             { expiresIn: '8h' }
         );
 
-        // 4. RESPONDER (¡AQUÍ ESTABA EL FALLO!)
-        // Ahora enviamos el objeto 'user' completo para que el frontend pueda leer el 'role'
+        // RESPUESTA COMPLETA CON ROL
         res.json({
             message: 'Bienvenido',
             token,
             user: {
                 id: user.id,
                 email: user.email,
-                role: user.role, // <--- ESTO ES LO QUE FALTABA
+                role: user.role,
                 agencyId: user.agencyId
             }
         });
@@ -74,22 +74,56 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-app.get('/api/me', verifyToken, async (req, res) => {
-    const user = await prisma.user.findUnique({ 
-        where: { id: req.user.userId },
-        include: { agency: { include: { wallet: true } } }
-    });
-    res.json(user);
+// REGISTRO DE AGENCIA (Ahora devuelve JSON limpio)
+app.post('/api/register', async (req, res) => {
+    try {
+        const { agencyName, email, password } = req.body;
+
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) return res.status(400).json({ error: 'El correo ya está registrado' });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Transacción: Crea Agencia + Usuario + Wallet a la vez
+        const result = await prisma.$transaction(async (prisma) => {
+            const newAgency = await prisma.agency.create({
+                data: { name: agencyName }
+            });
+
+            const newUser = await prisma.user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    role: 'AGENCY_ADMIN',
+                    agencyId: newAgency.id
+                }
+            });
+
+            await prisma.wallet.create({
+                data: { agencyId: newAgency.id }
+            });
+
+            return { agency: newAgency, user: newUser };
+        });
+
+        res.json({ message: 'Agencia registrada exitosamente', agencyId: result.agency.id });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// --- MÓDULO CLIENTES ---
-// --- RUTA: OBTENER CLIENTES (Con soporte para Modo Dios) ---
+// ==========================================
+//  RUTAS DE CLIENTES (AGENCIA)
+// ==========================================
+
+// OBTENER CLIENTES (Con soporte para "Ver Como" del Super Admin)
 app.get('/api/clients', verifyToken, async (req, res) => {
     try {
-        // Por defecto, buscamos los clientes de la agencia del usuario logueado
+        // Por defecto, carga la agencia del usuario
         let targetAgencyId = req.user.agencyId;
 
-        // PERO, si el usuario es SUPER_ADMIN y pide ver otra agencia (query params), se lo permitimos
+        // SI es Super Admin y pide ver otra agencia, cambiamos el objetivo
         if (req.user.role === 'SUPER_ADMIN' && req.query.agencyId) {
             targetAgencyId = req.query.agencyId;
         }
@@ -105,101 +139,95 @@ app.get('/api/clients', verifyToken, async (req, res) => {
     }
 });
 
-app.get('/api/clients', verifyToken, async (req, res) => {
-    const clients = await prisma.client.findMany({ where: { agencyId: req.user.agencyId } });
-    res.json(clients);
-});
-
-function verifyToken(req, res, next) {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) return res.status(403).json({ error: 'Falta Token' });
-    jwt.verify(token, SECRET_KEY, (err, decoded) => {
-        if (err) return res.status(401).json({ error: 'Token inválido' });
-        req.user = decoded;
-        next();
-    });
-}
-// --- RUTA: EDITAR CLIENTE (PUT) ---
-app.put('/api/clients/:id', verifyToken, async (req, res) => {
+// CREAR CLIENTE
+app.post('/api/clients', verifyToken, async (req, res) => {
     try {
-        const { id } = req.params; 
         const { name, contactName, email, adAccountId } = req.body;
-
-        const existingClient = await prisma.client.findFirst({
-            where: { id: id, agencyId: req.user.agencyId }
-        });
-
-        if (!existingClient) {
-            return res.status(404).json({ error: 'Cliente no encontrado o no tienes permiso.' });
+        
+        // Soporte para crear clientes en otra agencia si soy Super Admin
+        let targetAgencyId = req.user.agencyId;
+        if (req.user.role === 'SUPER_ADMIN' && req.body.targetAgencyId) {
+            targetAgencyId = req.body.targetAgencyId;
         }
 
-        const updatedClient = await prisma.client.update({
-            where: { id: id },
+        const newClient = await prisma.client.create({
+            data: {
+                name,
+                contactName,
+                email,
+                adAccountId,
+                agencyId: targetAgencyId
+            }
+        });
+        res.json(newClient);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// EDITAR CLIENTE
+app.put('/api/clients/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, contactName, email, adAccountId } = req.body;
+
+        // Si NO soy super admin, verifico que el cliente sea mío
+        if (req.user.role !== 'SUPER_ADMIN') {
+            const check = await prisma.client.findFirst({ where: { id, agencyId: req.user.agencyId } });
+            if (!check) return res.status(403).json({ error: 'No tienes permiso' });
+        }
+
+        const updated = await prisma.client.update({
+            where: { id },
             data: { name, contactName, email, adAccountId }
         });
 
-        res.json({ message: 'Cliente actualizado', client: updatedClient });
+        res.json({ message: 'Actualizado', client: updated });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// --- RUTA: ELIMINAR CLIENTE (DELETE) ---
-// RUTA: ELIMINAR AGENCIA (DELETE) - Solo Super Admin
-app.delete('/api/admin/agencies/:id', verifySuperAdmin, async (req, res) => {
+// ELIMINAR CLIENTE
+app.delete('/api/clients/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
-        
-        // Primero borramos clientes y usuarios asociados para no romper la base de datos (Integridad referencial)
-        await prisma.client.deleteMany({ where: { agencyId: id } });
-        await prisma.user.deleteMany({ where: { agencyId: id } });
-        await prisma.wallet.deleteMany({ where: { agencyId: id } });
-        
-        // Finalmente borramos la agencia
-        await prisma.agency.delete({ where: { id } });
 
-        res.json({ message: 'Agencia y todos sus datos eliminados permanentemente.' });
+        if (req.user.role !== 'SUPER_ADMIN') {
+            const check = await prisma.client.findFirst({ where: { id, agencyId: req.user.agencyId } });
+            if (!check) return res.status(403).json({ error: 'No tienes permiso' });
+        }
+
+        await prisma.client.delete({ where: { id } });
+        res.json({ message: 'Cliente eliminado' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
 // ==========================================
-//  ZONA SUPER ADMIN (SAAS MASTER)
+//  RUTAS SUPER ADMIN (GOD MODE)
 // ==========================================
 
-// Middleware para proteger rutas de Super Admin
-const verifySuperAdmin = async (req, res, next) => {
-    // Primero verificamos que sea usuario válido
-    verifyToken(req, res, async () => {
-        // Segundo: Verificamos que tenga el rol especial
-        if (req.user.role !== 'SUPER_ADMIN') {
-            return res.status(403).json({ error: 'Acceso denegado. Se requiere Nivel Dios.' });
-        }
-        next();
-    });
-};
-
-// RUTA: VER TODAS LAS AGENCIAS (Para el dueño del SaaS)
+// VER TODAS LAS AGENCIAS
 app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
     try {
         const agencies = await prisma.agency.findMany({
             include: { 
-                users: { select: { email: true } }, // Traer email del dueño
-                clients: true, // Traer sus clientes para saber si usan el sistema
-                wallet: true   // Traer su saldo
+                users: { select: { email: true } },
+                clients: true,
+                wallet: true
             },
             orderBy: { createdAt: 'desc' }
         });
         
-        // Formateamos la data para que el frontend no sufra
-        const data = agencies.map(agency => ({
-            id: agency.id,
-            name: agency.name,
-            ownerEmail: agency.users[0]?.email || 'Sin Dueño',
-            totalClients: agency.clients.length,
-            balance: agency.wallet ? agency.wallet.balance : 0,
-            active: agency.active,
-            createdAt: agency.createdAt
+        const data = agencies.map(a => ({
+            id: a.id,
+            name: a.name,
+            ownerEmail: a.users[0]?.email || 'Sin Dueño',
+            totalClients: a.clients.length,
+            balance: a.wallet ? a.wallet.balance : 0,
+            active: a.active
         }));
 
         res.json(data);
@@ -208,20 +236,39 @@ app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
     }
 });
 
-// RUTA: BANEAR O ACTIVAR AGENCIA (Interruptor de apagado)
+// ACTIVAR / DESACTIVAR AGENCIA
 app.put('/api/admin/agencies/:id/toggle', verifySuperAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const agency = await prisma.agency.findUnique({ where: { id } });
-        
         const updated = await prisma.agency.update({
             where: { id },
-            data: { active: !agency.active } // Invertir estado (Si es true -> false)
+            data: { active: !agency.active }
         });
-
-        res.json({ message: `Agencia ${updated.active ? 'ACTIVADA' : 'SUSPENDIDA'}`, agency: updated });
+        res.json({ message: 'Estado actualizado', agency: updated });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-app.listen(PORT, () => console.log(`Server listo en puerto ${PORT}`));
+
+// BORRAR AGENCIA DEFINITIVAMENTE
+app.delete('/api/admin/agencies/:id', verifySuperAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Limpieza en cascada manual
+        await prisma.client.deleteMany({ where: { agencyId: id } });
+        await prisma.user.deleteMany({ where: { agencyId: id } });
+        await prisma.wallet.deleteMany({ where: { agencyId: id } });
+        await prisma.agency.delete({ where: { id } });
+
+        res.json({ message: 'Agencia eliminada permanentemente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// INICIAR SERVIDOR
+app.listen(PORT, () => {
+    console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
+});
