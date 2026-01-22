@@ -359,6 +359,44 @@ app.get('/api/agency/me', verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// EDITAR DATOS DE AGENCIA Y DUEÑO (Super Admin)
+app.put('/api/admin/agencies/:id/update', verifySuperAdmin, async (req, res) => {
+    try {
+        const { id } = req.params; // ID de la Agencia
+        const { name, ownerEmail, password } = req.body;
+
+        // 1. Actualizar nombre de la Agencia
+        await prisma.agency.update({
+            where: { id },
+            data: { name }
+        });
+
+        // 2. Buscar al dueño (Usuario) y actualizar sus datos
+        // Buscamos al usuario de esta agencia que tenga rol ADMIN (o simplemente el que tenga ese email)
+        const userUpdateData = { email: ownerEmail };
+        
+        if (password && password.trim() !== "") {
+            userUpdateData.password = await bcrypt.hash(password, 10);
+        }
+
+        // Actualizamos todos los usuarios asociados a esa agencia que coincidan con el email antiguo o sean el principal
+        // Para simplificar, asumimos que editamos el primer usuario encontrado de esa agencia
+        // Ojo: Esto asume un dueño por agencia.
+        const firstUser = await prisma.user.findFirst({ where: { agencyId: id } });
+        
+        if(firstUser) {
+            await prisma.user.update({
+                where: { id: firstUser.id },
+                data: userUpdateData
+            });
+        }
+
+        res.json({ message: 'Agencia y credenciales actualizadas correctamente' });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
