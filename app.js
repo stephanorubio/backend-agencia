@@ -346,18 +346,26 @@ app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
     }
 });
 
-// ACTIVAR / DESACTIVAR AGENCIA
+// --- RUTA: ACTIVAR / DESACTIVAR AGENCIA ---
 app.put('/api/admin/agencies/:id/toggle', verifySuperAdmin, async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // 1. Buscamos la agencia actual
         const agency = await prisma.agency.findUnique({ where: { id } });
+        
+        if (!agency) return res.status(404).json({ error: 'Agencia no encontrada' });
+
+        // 2. Invertimos su estado (Si es true -> false, Si es false -> true)
         const updated = await prisma.agency.update({
             where: { id },
-            data: { active: !agency.active }
+            data: { active: !agency.active } // <--- Aquí ocurre la magia
         });
+
         res.json({ message: 'Estado actualizado', agency: updated });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error(error);
+        res.status(500).json({ error: 'Error interno al cambiar estado' });
     }
 });
 
