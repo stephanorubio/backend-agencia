@@ -141,24 +141,25 @@ app.get('/api/clients', verifyToken, async (req, res) => {
     }
 });
 
-// CREAR CLIENTE
+// CREAR CLIENTE (Actualizado con Password)
 app.post('/api/clients', verifyToken, async (req, res) => {
     try {
-        const { name, contactName, email, adAccountId } = req.body;
+        const { name, contactName, email, adAccountId, password, targetAgencyId } = req.body;
         
-        // Soporte para crear clientes en otra agencia si soy Super Admin
-        let targetAgencyId = req.user.agencyId;
-        if (req.user.role === 'SUPER_ADMIN' && req.body.targetAgencyId) {
-            targetAgencyId = req.body.targetAgencyId;
+        let agencyId = req.user.agencyId;
+        if (req.user.role === 'SUPER_ADMIN' && targetAgencyId) {
+            agencyId = targetAgencyId;
         }
+
+        // Si no mandan contraseña, asignamos "123456" por defecto
+        const passToHash = password || "123456"; 
+        const hashedPassword = await bcrypt.hash(passToHash, 10);
 
         const newClient = await prisma.client.create({
             data: {
-                name,
-                contactName,
-                email,
-                adAccountId,
-                agencyId: targetAgencyId
+                name, contactName, email, adAccountId,
+                password: hashedPassword, // <--- Guardamos la contraseña encriptada
+                agencyId
             }
         });
         res.json(newClient);
