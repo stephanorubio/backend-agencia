@@ -114,6 +114,31 @@ app.post('/api/portal/login', async (req, res) => {
     }
 });
 
+// OBTENER MIS DATOS (Para el Dashboard del Cliente)
+app.get('/api/portal/me', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        if (!token) return res.status(403).json({ error: 'Token requerido' });
+
+        jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
+            if (err) return res.status(403).json({ error: 'Token inválido' });
+
+            // Buscamos al cliente Y su agencia (para mostrar el logo de la agencia en el portal)
+            const client = await prisma.client.findUnique({
+                where: { id: decoded.id },
+                include: { agency: { select: { name: true, logo: true } } }
+            });
+
+            if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+            res.json(client);
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // REGISTRO DE AGENCIA (Ahora devuelve JSON limpio)
 app.post('/api/register', async (req, res) => {
     try {
