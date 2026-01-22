@@ -42,6 +42,9 @@ model Client {
   contactName String?
   email       String?
   adAccountId String?
+  
+  password    String   @default("$2a$10$EpRnTzVlqHNP0.fkbpo9kul.kUM.dF.w.k.d.w.k.d.w.k.d.w.k.") // Hash por defecto para "123456"
+
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
   createdAt   DateTime @default(now())
