@@ -270,25 +270,30 @@ app.delete('/api/admin/agencies/:id', verifySuperAdmin, async (req, res) => {
     }
 });
 
-// --- RUTA: SUBIR LOGO DE AGENCIA ---
-// Recibe una imagen en Base64 y la guarda en la agencia
+// --- RUTA: SUBIR LOGO (CORREGIDA PARA MODO DIOS) ---
 app.put('/api/agency/logo', verifyToken, async (req, res) => {
     try {
-        const { logoBase64 } = req.body;
+        const { logoBase64, targetAgencyId } = req.body;
         
-        // Validacion simple: Que no sea una cadena vacia
         if (!logoBase64) return res.status(400).json({ error: 'Falta la imagen' });
 
-        // Guardamos en la BD
+        // POR DEFECTO: Actualizo mi propia agencia
+        let idToUpdate = req.user.agencyId;
+
+        // PERO: Si soy Super Admin y me dicen qué agencia tocar, cambio el objetivo
+        if (req.user.role === 'SUPER_ADMIN' && targetAgencyId) {
+            idToUpdate = targetAgencyId;
+        }
+
         const updatedAgency = await prisma.agency.update({
-            where: { id: req.user.agencyId },
+            where: { id: idToUpdate },
             data: { logo: logoBase64 }
         });
 
         res.json({ message: 'Logo actualizado', logo: updatedAgency.logo });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Error al guardar el logo (quizás es muy pesado)' });
+        res.status(500).json({ error: 'Error al guardar el logo' });
     }
 });
 
