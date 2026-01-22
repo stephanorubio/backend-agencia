@@ -139,6 +139,7 @@ app.get('/api/portal/me', async (req, res) => {
     }
 });
 
+
 // REGISTRO DE AGENCIA (Ahora devuelve JSON limpio)
 app.post('/api/register', async (req, res) => {
     try {
@@ -275,6 +276,38 @@ app.delete('/api/clients/:id', verifyToken, async (req, res) => {
 
         await prisma.client.delete({ where: { id } });
         res.json({ message: 'Cliente eliminado' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- ACTUALIZAR LOGO DE CLIENTE ---
+app.put('/api/clients/:id/logo', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { logoBase64 } = req.body;
+
+        // 1. Buscar el cliente
+        const client = await prisma.client.findUnique({ where: { id } });
+        if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+        // 2. Verificar Permisos (Seguridad estricta)
+        let allowed = false;
+
+        if (req.user.role === 'SUPER_ADMIN') allowed = true; // Dios puede todo
+        else if (req.user.role === 'CLIENT' && req.user.id === id) allowed = true; // El cliente puede editarse a sí mismo
+        else if (req.user.agencyId === client.agencyId) allowed = true; // La agencia dueña puede editar
+
+        if (!allowed) return res.status(403).json({ error: 'No tienes permiso para editar este logo' });
+
+        // 3. Actualizar
+        const updated = await prisma.client.update({
+            where: { id },
+            data: { logo: logoBase64 }
+        });
+
+        res.json({ message: 'Logo actualizado', logo: updated.logo });
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
