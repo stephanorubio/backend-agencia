@@ -76,6 +76,44 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// --- LOGIN PARA CLIENTES (PORTAL) ---
+app.post('/api/portal/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // 1. Buscamos en la tabla CLIENT (no en User)
+        // Nota: Asumimos que el email es único. Si no lo es, esto podría dar problemas.
+        const client = await prisma.client.findFirst({ where: { email } });
+
+        if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+        // 2. Verificar contraseña
+        const validPass = await bcrypt.compare(password, client.password);
+        if (!validPass) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+        // 3. Generar Token (Rol especial: CLIENT)
+        const token = jwt.sign(
+            { id: client.id, role: 'CLIENT', agencyId: client.agencyId, name: client.name },
+            SECRET_KEY,
+            { expiresIn: '8h' }
+        );
+
+        res.json({
+            message: 'Bienvenido al Portal',
+            token,
+            client: {
+                id: client.id,
+                name: client.name,
+                email: client.email,
+                role: 'CLIENT'
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // REGISTRO DE AGENCIA (Ahora devuelve JSON limpio)
 app.post('/api/register', async (req, res) => {
     try {
