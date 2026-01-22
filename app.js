@@ -42,24 +42,38 @@ const verifySuperAdmin = (req, res, next) => {
 //  RUTAS DE AUTENTICACIÓN
 // ==========================================
 
-// LOGIN (Corregido para enviar ROL)
+// --- RUTA: LOGIN (CON VERIFICACIÓN DE ESTADO DE AGENCIA) ---
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const user = await prisma.user.findUnique({ where: { email } });
+
+        // 1. Buscar usuario E INCLUIR DATOS DE SU AGENCIA para ver el estado
+        const user = await prisma.user.findUnique({ 
+            where: { email },
+            include: { agency: true } // <--- CRÍTICO: Traemos los datos de la agencia
+        });
 
         if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
+        // 2. CHECK DE SEGURIDAD: ¿La agencia está activa?
+        // Si el usuario NO es Super Admin y su agencia está desactivada... ¡BLOQUEADO!
+        if (user.role !== 'SUPER_ADMIN' && user.agency && !user.agency.active) {
+            return res.status(403).json({ 
+                error: 'ACCESO BLOQUEADO: Su agencia ha sido desactivada. Por favor, contacte con el Administrador del sistema.' 
+            });
+        }
+
+        // 3. Verificar contraseña
         const validPass = await bcrypt.compare(password, user.password);
         if (!validPass) return res.status(401).json({ error: 'Contraseña incorrecta' });
 
+        // 4. Generar Token
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role, agencyId: user.agencyId },
-            SECRET_KEY,
+            process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
 
-        // RESPUESTA COMPLETA CON ROL
         res.json({
             message: 'Bienvenido',
             token,
@@ -75,7 +89,6 @@ app.post('/api/login', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
 // --- LOGIN PARA CLIENTES (PORTAL) ---
 app.post('/api/portal/login', async (req, res) => {
     try {
