@@ -207,23 +207,32 @@ app.post('/api/clients', verifyToken, async (req, res) => {
 });
 
 // EDITAR CLIENTE
+// EDITAR CLIENTE (Con soporte para cambio de contraseña)
 app.put('/api/clients/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, contactName, email, adAccountId } = req.body;
+        const { name, contactName, email, adAccountId, password } = req.body;
 
-        // Si NO soy super admin, verifico que el cliente sea mío
+        // Verificaciones de seguridad (igual que antes)
         if (req.user.role !== 'SUPER_ADMIN') {
             const check = await prisma.client.findFirst({ where: { id, agencyId: req.user.agencyId } });
             if (!check) return res.status(403).json({ error: 'No tienes permiso' });
         }
 
+        // Preparamos los datos a actualizar
+        const updateData = { name, contactName, email, adAccountId };
+
+        // SI mandaron contraseña nueva, la encriptamos y la agregamos al paquete
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
         const updated = await prisma.client.update({
             where: { id },
-            data: { name, contactName, email, adAccountId }
+            data: updateData
         });
 
-        res.json({ message: 'Actualizado', client: updated });
+        res.json({ message: 'Cliente actualizado', client: updated });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
