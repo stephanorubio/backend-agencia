@@ -211,7 +211,7 @@ app.delete('/api/clients/:id', verifyToken, async (req, res) => {
 //  RUTAS SUPER ADMIN (GOD MODE)
 // ==========================================
 
-// VER TODAS LAS AGENCIAS
+// RUTA: VER TODAS LAS AGENCIAS (Para el dueño del SaaS)
 app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
     try {
         const agencies = await prisma.agency.findMany({
@@ -223,13 +223,15 @@ app.get('/api/admin/agencies', verifySuperAdmin, async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
         
-        const data = agencies.map(a => ({
-            id: a.id,
-            name: a.name,
-            ownerEmail: a.users[0]?.email || 'Sin Dueño',
-            totalClients: a.clients.length,
-            balance: a.wallet ? a.wallet.balance : 0,
-            active: a.active
+        // Formateamos la data
+        const data = agencies.map(agency => ({
+            id: agency.id,
+            name: agency.name,
+            logo: agency.logo, // <--- ¡AQUÍ ESTABA EL CULPABLE! FALTABA ESTA LÍNEA
+            ownerEmail: agency.users[0]?.email || 'Sin Dueño',
+            totalClients: agency.clients.length,
+            balance: agency.wallet ? agency.wallet.balance : 0,
+            active: agency.active
         }));
 
         res.json(data);
