@@ -47,6 +47,7 @@ model Client {
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
   createdAt   DateTime @default(now())
+  credentials Credential[]
 }
 // --- GESTOR DE CONTRASEÑAS (WALLET) ---
 
