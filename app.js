@@ -702,13 +702,13 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
 
         // AUDITORÍA: Registrar QUÉ empleado vio la clave
         await prisma.credentialLog.create({
-            data: {
-                action: 'ACCESSED_BY_EMPLOYEE',
-                userEmail: `${req.user.name} (${req.user.email})`, 
-                ipAddress: req.ip,
-                credentialId: magicLink.credentialId
-            }
-        });
+    data: {
+        action: 'ACCESSED_BY_EMPLOYEE',
+        userEmail: `${req.user.name} (${req.user.email})`, 
+        ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+        credentialId: magicLink.credentialId // <-- Verifica que este ID exista
+    }
+});
 
         res.json({
             serviceName: magicLink.credential.serviceName,
