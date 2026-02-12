@@ -48,3 +48,40 @@ model Client {
   agency      Agency   @relation(fields: [agencyId], references: [id])
   createdAt   DateTime @default(now())
 }
+// --- GESTOR DE CONTRASEÑAS (WALLET) ---
+
+model Credential {
+  id             String   @id @default(uuid())
+  serviceName    String   // Ej: Facebook Ads, Gmail, cPanel
+  type           String   // Ej: SOCIAL, SERVER, EMAIL, API
+  username       String?
+  // DATOS ENCRIPTADOS
+  encryptedData  String   @db.Text // La contraseña encriptada
+  iv             String   // Vector de inicialización (necesario para desencriptar)
+  
+  notes          String?
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id])
+  
+  logs           CredentialLog[]
+  createdAt      DateTime @default(now())
+}
+
+model CredentialLog {
+  id           String     @id @default(uuid())
+  action       String     // Ej: VIEWED, COPIED, SHARED_LINK_CREATED
+  userEmail    String     // Quién lo hizo (puede ser Admin, Agencia o Empleado)
+  ipAddress    String?
+  credentialId String
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+}
+
+model MagicLink {
+  id           String   @id @default(uuid())
+  token        String   @unique // El código secreto del link
+  credentialId String   // Qué contraseña muestra
+  expiresAt    DateTime // Cuándo muere el link
+  used         Boolean  @default(false) // Si es de un solo uso
+  createdAt    DateTime @default(now())
+}
