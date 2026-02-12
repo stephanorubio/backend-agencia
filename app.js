@@ -743,6 +743,32 @@ app.get('/api/audit-logs', verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// EDITAR CREDENCIAL
+app.put('/api/credentials/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { serviceName, type, username, password, notes } = req.body;
+        
+        // Si hay password nueva, re-encriptamos
+        let updateData = { serviceName, type, username, notes };
+        if (password) {
+            const { encryptedData, iv } = encrypt(password);
+            updateData.encryptedData = encryptedData;
+            updateData.iv = iv;
+        }
+
+        await prisma.credential.update({ where: { id }, data: updateData });
+        res.json({ message: 'Credencial actualizada' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// BORRAR CREDENCIAL
+app.delete('/api/credentials/:id', verifyToken, async (req, res) => {
+    try {
+        await prisma.credential.delete({ where: { id: req.params.id } });
+        res.json({ message: 'Credencial eliminada' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
