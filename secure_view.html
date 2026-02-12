@@ -68,10 +68,11 @@
 
         async function unlockData() {
             const tokenLink = new URLSearchParams(window.location.search).get('token');
-            const res = await fetch(`${API_URL}/magic-link/${tokenLink}/unlock`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${employeeToken}` }
-            });
+            // Dentro de secure_view.html, busca la función unlockData y cámbiala a POST:
+const res = await fetch(`${API_URL}/magic-link/${tokenLink}/unlock`, {
+    method: 'POST', // <--- DEBE SER POST
+    headers: { 'Authorization': `Bearer ${employeeToken}` }
+});
             const secret = await res.json();
             
             if(res.ok) {
