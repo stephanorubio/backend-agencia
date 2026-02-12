@@ -605,14 +605,18 @@ app.post('/api/employees', verifyToken, async (req, res) => {
 // 2. LISTAR EMPLEADOS
 app.get('/api/employees', verifyToken, async (req, res) => {
     try {
+        // Prioridad 1: agencyId que viene en el query (para Super Admin "viendo como")
+        // Prioridad 2: agencyId del token del usuario
+        const targetAgencyId = req.query.agencyId || req.user.agencyId;
+
+        if (!targetAgencyId) return res.status(400).json({ error: "No se especificó la agencia" });
+
         const employees = await prisma.employee.findMany({
-            where: { agencyId: req.user.agencyId },
+            where: { agencyId: targetAgencyId },
             select: { id: true, name: true, email: true, role: true, cedula: true }
         });
         res.json(employees);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 // 3. EDITAR EMPLEADO (O Resetear Clave)
