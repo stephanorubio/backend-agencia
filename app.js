@@ -538,7 +538,32 @@ app.put('/api/admin/agencies/:id/update', verifySuperAdmin, async (req, res) => 
         res.status(500).json({ error: error.message });
     }
 });
-
+// --- RUTA DE EMERGENCIA: RESETEAR SUPER ADMIN ---
+// Visita esta ruta desde el navegador para arreglar tu usuario
+app.get('/api/emergency-fix', async (req, res) => {
+    try {
+        const email = 'stephanorubio@gmail.com'; // <--- TU CORREO EXACTO
+        const newPassword = '123456';
+        
+        // 1. Encriptar con la librería interna del servidor (100% compatible)
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        
+        // 2. Actualizar en BD
+        const user = await prisma.user.update({
+            where: { email },
+            data: { password: hashedPassword }
+        });
+        
+        res.json({ 
+            success: true, 
+            message: 'Contraseña reseteada correctamente', 
+            user: user.email,
+            new_hash: user.password 
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
