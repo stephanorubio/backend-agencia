@@ -832,6 +832,31 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
         });
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
+// RUTA PARA ACTUALIZAR CREDENCIAL (BÓVEDA)
+app.put('/api/credentials/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { serviceName, type, username, password, notes } = req.body;
+        
+        let updateData = { serviceName, type, username, notes };
+
+        // Solo re-encriptamos si el usuario escribió algo en el campo de password
+        if (password && password.trim() !== "") {
+            const { encryptedData, iv } = encrypt(password); // Usamos tu función de encriptación
+            updateData.encryptedData = encryptedData;
+            updateData.iv = iv;
+        }
+
+        await prisma.credential.update({
+            where: { id },
+            data: updateData
+        });
+
+        res.json({ message: 'Credencial actualizada con éxito' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
