@@ -10,6 +10,17 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET;
+const path = require('path'); // Importante para las rutas de archivos
+
+// ... después de const app = express(); ...
+
+// Esta línea le dice al servidor: "Si alguien pide un archivo que existe en mi carpeta, dáselo"
+app.use(express.static(__dirname));
+
+// Y esta línea permite que el link sea "encriptado" o limpio (sin el .html)
+app.get('/secure_view', (req, res) => {
+    res.sendFile(path.join(__dirname, 'secure_view.html'));
+});
 
 // --- CONFIGURACIÓN DE APP ---
 app.use(cors());
