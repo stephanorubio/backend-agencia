@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso Seguro Corporativo</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --primary: #3b82f6; --accent: #f59e0b; }
+        body { background-color: var(--bg); color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .secure-card { background: var(--card); padding: 40px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #334155; border: 1px solid #475569; color: white; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .field { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left; position: relative; }
+        .value { font-family: monospace; font-size: 1.2rem; color: #fff; word-break: break-all; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="secure-card">
+        <i class="fas fa-user-shield" style="font-size:3rem; color:var(--primary); margin-bottom:20px;"></i>
+        <h2>Acceso Restringido</h2>
+        <p style="color:#94a3b8;">Identifícate para ver esta credencial.</p>
+        <form onsubmit="verifyEmployee(event)">
+            <input type="email" id="email" placeholder="Correo Corporativo" required>
+            <input type="password" id="password" placeholder="Tu Contraseña" required>
+            <button type="submit" id="btn-login">Verificar Identidad</button>
+        </form>
+    </div>
+
+    <div id="data-screen" class="secure-card hidden">
+        <h2 id="svc-name" style="color:white;">--</h2>
+        <p style="color:#94a3b8; font-size:0.8rem;">Visto por: <strong id="emp-name" style="color:white;">--</strong></p>
+        <div class="field">
+            <span style="font-size:0.7rem; color:#94a3b8;">USUARIO</span>
+            <div class="value" id="svc-user">--</div>
+        </div>
+        <div class="field" style="border:1px solid var(--accent);">
+            <span style="font-size:0.7rem; color:var(--accent);">CONTRASEÑA</span>
+            <div class="value" id="svc-pass">--</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://api-agencia-0smc.onrender.com/api';
+        let employeeToken = '';
+
+        async function verifyEmployee(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const res = await fetch(`${API_URL}/employee/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.error);
+
+                employeeToken = data.token;
+                document.getElementById('emp-name').innerText = data.name;
+                unlockData();
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+        }
+
+        async function unlockData() {
+            const tokenLink = new URLSearchParams(window.location.search).get('token');
+            const res = await fetch(`${API_URL}/magic-link/${tokenLink}/unlock`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${employeeToken}` }
+            });
+            const secret = await res.json();
+            
+            if(res.ok) {
+                document.getElementById('svc-name').innerText = secret.serviceName;
+                document.getElementById('svc-user').innerText = secret.username;
+                document.getElementById('svc-pass').innerText = secret.password;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('data-screen').classList.remove('hidden');
+            } else { Swal.fire('Error', secret.error, 'error'); }
+        }
+    </script>
+</body>
+</html>
