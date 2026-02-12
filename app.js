@@ -26,6 +26,115 @@ function decrypt(text, ivHex) {
     decrypted = Buffer.concat([decrypted, decipher.final()]);
     return decrypted.toString();
 }
+// --- RUTAS DE LA BÓVEDA (WALLET) ---
+
+// 1. GUARDAR NUEVA CREDENCIAL (Encriptando)
+app.post('/api/credentials', verifyToken, async (req, res) => {
+    try {
+        const { serviceName, type, username, password, notes, clientId } = req.body;
+        
+        // Encriptamos la contraseña ANTES de tocar la base de datos
+        const { encryptedData, iv } = encrypt(password);
+
+        const cred = await prisma.credential.create({
+            data: {
+                serviceName, type, username, notes,
+                encryptedData, iv,
+                clientId
+            }
+        });
+
+        // Log de creación
+        await prisma.credentialLog.create({
+            data: {
+                action: 'CREATED',
+                userEmail: req.user.email || 'Sistema',
+                credentialId: cred.id
+            }
+        });
+
+        res.json({ message: 'Credencial guardada seguramente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. LISTAR CREDENCIALES DE UN CLIENTE (Sin revelar contraseña)
+app.get('/api/clients/:clientId/credentials', verifyToken, async (req, res) => {
+    try {
+        const { clientId } = req.params;
+        // Solo devolvemos metadatos, NUNCA la password aquí
+        const credentials = await prisma.credential.findMany({
+            where: { clientId },
+            select: { id: true, serviceName: true, type: true, username: true, notes: true, createdAt: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(credentials);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. REVELAR CONTRASEÑA (Alta Seguridad + Log)
+app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const cred = await prisma.credential.findUnique({ where: { id } });
+
+        if (!cred) return res.status(404).json({ error: 'No encontrado' });
+
+        // Desencriptamos
+        const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
+
+        // --- TRAZABILIDAD OBLIGATORIA ---
+        // Guardamos quién pidió ver esto
+        await prisma.credentialLog.create({
+            data: {
+                action: 'VIEW_REVEALED',
+                userEmail: req.user.email || 'Usuario', // Tu token debe traer email
+                ipAddress: req.ip,
+                credentialId: id
+            }
+        });
+
+        res.json({ password: decryptedPassword });
+    } catch (error) {
+        res.status(500).json({ error: 'Error de desencriptado' });
+    }
+});
+
+// 4. GENERAR LINK TEMPORAL (Para empleados)
+app.post('/api/credentials/:id/share', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { minutes = 30 } = req.body; // Dura 30 mins por defecto
+
+        // Crear token único
+        const token = crypto.randomBytes(24).toString('hex');
+        const expiresAt = new Date(Date.now() + minutes * 60000);
+
+        await prisma.magicLink.create({
+            data: {
+                token,
+                credentialId: id,
+                expiresAt
+            }
+        });
+
+        // Log de que se creó un link
+        await prisma.credentialLog.create({
+            data: {
+                action: `SHARED_LINK_${minutes}MIN`,
+                userEmail: req.user.email,
+                credentialId: id
+            }
+        });
+
+        res.json({ link: `https://tusitio.com/secure_view.html?token=${token}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 require('dotenv').config();
 const express = require('express');
