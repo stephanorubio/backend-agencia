@@ -309,7 +309,8 @@ app.post('/api/credentials/:id/share', verifyToken, async (req, res) => {
             }
         });
 
-        res.json({ link: `https://api-agencia-0smc.onrender.com/secure_view.html?token=${token}` });
+// Quitamos el .html para que se vea más profesional y "encriptado"
+res.json({ link: `https://api-agencia-0smc.onrender.com/secure_view?token=${token}` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
