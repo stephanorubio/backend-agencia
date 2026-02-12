@@ -73,13 +73,12 @@ model Credential {
   // DATOS ENCRIPTADOS
   encryptedData  String   @db.Text // La contraseña encriptada
   iv             String   // Vector de inicialización (necesario para desencriptar)
-  
   notes          String?
   clientId       String
   client         Client   @relation(fields: [clientId], references: [id])
-  
   logs           CredentialLog[]
   createdAt      DateTime @default(now())
+  magicLinks    MagicLink[]
 }
 
 model CredentialLog {
@@ -93,10 +92,11 @@ model CredentialLog {
 }
 
 model MagicLink {
-  id           String   @id @default(uuid())
-  token        String   @unique // El código secreto del link
-  credentialId String   // Qué contraseña muestra
-  expiresAt    DateTime // Cuándo muere el link
-  used         Boolean  @default(false) // Si es de un solo uso
-  createdAt    DateTime @default(now())
+  id           String     @id @default(uuid())
+  token        String     @unique
+  credentialId String
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade) // <--- AGREGAR ESTA LÍNEA
+  expiresAt    DateTime
+  used         Boolean    @default(false)
+  createdAt    DateTime   @default(now())
 }
