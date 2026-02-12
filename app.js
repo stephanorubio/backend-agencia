@@ -1,3 +1,32 @@
+const crypto = require('crypto');
+
+// --- UTILIDADES DE CRIPTOGRAFÍA ---
+const ALGORITHM = 'aes-256-cbc';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // Debe ser de 32 chars
+const IV_LENGTH = 16; // AES block size
+
+function encrypt(text) {
+    if(!text) return { encryptedData: null, iv: null };
+    let iv = crypto.randomBytes(IV_LENGTH);
+    let cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return { 
+        iv: iv.toString('hex'), 
+        encryptedData: encrypted.toString('hex') 
+    };
+}
+
+function decrypt(text, ivHex) {
+    if(!text || !ivHex) return null;
+    let iv = Buffer.from(ivHex, 'hex');
+    let encryptedText = Buffer.from(text, 'hex');
+    let decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+}
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
