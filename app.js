@@ -615,6 +615,41 @@ app.get('/api/employees', verifyToken, async (req, res) => {
     }
 });
 
+// 3. EDITAR EMPLEADO (O Resetear Clave)
+app.put('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, role, password } = req.body;
+        
+        let updateData = { name, email, role };
+
+        // Si se envió una nueva contraseña, la encriptamos antes de guardar
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await prisma.employee.update({
+            where: { id },
+            data: updateData
+        });
+
+        res.json({ message: 'Empleado actualizado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. ELIMINAR EMPLEADO
+app.delete('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma.employee.delete({ where: { id } });
+        res.json({ message: 'Empleado eliminado' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ==========================================
 //  ACCESO SEGURO (LÓGICA DEL LINK)
 // ==========================================
