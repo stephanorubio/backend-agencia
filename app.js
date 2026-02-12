@@ -717,6 +717,32 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// OBTENER HISTORIAL DE AUDITORÍA (LOGS)
+app.get('/api/audit-logs', verifyToken, async (req, res) => {
+    try {
+        // Buscamos los logs de credenciales que pertenecen a clientes de TU agencia
+        const logs = await prisma.credentialLog.findMany({
+            where: {
+                credential: {
+                    client: {
+                        agencyId: req.user.agencyId
+                    }
+                }
+            },
+            include: {
+                credential: true // Para saber el nombre del servicio (Facebook, etc)
+            },
+            orderBy: {
+                createdAt: 'desc' // Los más recientes primero
+            },
+            take: 50 // Mostramos los últimos 50 movimientos
+        });
+
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
