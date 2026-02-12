@@ -298,7 +298,7 @@ app.post('/api/credentials/:id/share', verifyToken, async (req, res) => {
             }
         });
 
-        res.json({ link: `https://tusitio.com/secure_view.html?token=${token}` });
+        res.json({ link: `https://api-agencia-0smc.onrender.com/secure_view.html?token=${token}` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
