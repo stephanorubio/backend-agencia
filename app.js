@@ -773,6 +773,65 @@ app.delete('/api/credentials/:id', verifyToken, async (req, res) => {
         res.json({ message: 'Credencial eliminada' });
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
+// --- 1. EDITAR EMPLEADO ---
+app.put('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { name, email, role, password } = req.body;
+        let updateData = { name, email, role };
+        
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await prisma.employee.update({
+            where: { id: req.params.id },
+            data: updateData
+        });
+        res.json({ message: 'Empleado actualizado' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// --- 2. BORRAR EMPLEADO ---
+app.delete('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        await prisma.employee.delete({ where: { id: req.params.id } });
+        res.json({ message: 'Empleado eliminado' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// --- 3. DESBLOQUEO SEGURO CON LOG DE VISITAS ---
+// Reemplaza el app.get('/api/magic-link/:token') por este POST:
+app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
+    try {
+        const magicLink = await prisma.magicLink.findUnique({
+            where: { token: req.params.token },
+            include: { credential: true }
+        });
+
+        if (!magicLink || magicLink.expiresAt < new Date()) {
+            return res.status(403).json({ error: 'Enlace inválido o expirado' });
+        }
+
+        const decryptedPassword = decrypt(magicLink.credential.encryptedData, magicLink.credential.iv);
+
+        // AQUÍ SE GUARDA EL HISTORIAL REAL
+        await prisma.credentialLog.create({
+            data: {
+                action: 'ACCESSED_BY_EMPLOYEE',
+                userEmail: `${req.user.name} (${req.user.email})`, 
+                ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+                credentialId: magicLink.credentialId
+            }
+        });
+
+        res.json({
+            serviceName: magicLink.credential.serviceName,
+            username: magicLink.credential.username,
+            password: decryptedPassword,
+            notes: magicLink.credential.notes
+        });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
