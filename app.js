@@ -564,6 +564,112 @@ app.get('/api/emergency-fix', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// ==========================================
+//  GESTIÓN DE EMPLEADOS (STAFF)
+// ==========================================
+
+// 1. CREAR EMPLEADO (Solo la Agencia puede hacerlo)
+app.post('/api/employees', verifyToken, async (req, res) => {
+    try {
+        const { name, cedula, email, password, role } = req.body;
+        
+        // Encriptar contraseña del empleado
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newEmployee = await prisma.employee.create({
+            data: {
+                name, cedula, email, role,
+                password: hashedPassword,
+                agencyId: req.user.agencyId
+            }
+        });
+        
+        res.json({ message: 'Empleado creado exitosamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. LISTAR EMPLEADOS
+app.get('/api/employees', verifyToken, async (req, res) => {
+    try {
+        const employees = await prisma.employee.findMany({
+            where: { agencyId: req.user.agencyId },
+            select: { id: true, name: true, email: true, role: true, cedula: true }
+        });
+        res.json(employees);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ==========================================
+//  ACCESO SEGURO (LÓGICA DEL LINK)
+// ==========================================
+
+// A. LOGIN DEL EMPLEADO EN LA PANTALLA SECRETA
+app.post('/api/employee/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const emp = await prisma.employee.findUnique({ where: { email } });
+        
+        if (!emp) return res.status(404).json({ error: 'Empleado no encontrado' });
+        
+        const valid = await bcrypt.compare(password, emp.password);
+        if (!valid) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+        // Token temporal para sesión de lectura (15 mins)
+        const token = jwt.sign(
+            { id: emp.id, name: emp.name, email: emp.email, role: 'EMPLOYEE' },
+            SECRET_KEY,
+            { expiresIn: '15m' }
+        );
+
+        res.json({ token, name: emp.name });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// B. DESBLOQUEAR EL LINK (Requiere Token de Empleado)
+app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
+    try {
+        const { token } = req.params;
+        
+        // Validar si el link existe y no ha caducado
+        const magicLink = await prisma.magicLink.findUnique({
+            where: { token },
+            include: { credential: true }
+        });
+
+        if (!magicLink || magicLink.expiresAt < new Date()) {
+            return res.status(403).json({ error: 'Enlace expirado o inválido.' });
+        }
+
+        // Desencriptar la contraseña real
+        const decryptedPassword = decrypt(magicLink.credential.encryptedData, magicLink.credential.iv);
+
+        // AUDITORÍA: Registrar QUÉ empleado vio la clave
+        await prisma.credentialLog.create({
+            data: {
+                action: 'ACCESSED_BY_EMPLOYEE',
+                userEmail: `${req.user.name} (${req.user.email})`, 
+                ipAddress: req.ip,
+                credentialId: magicLink.credentialId
+            }
+        });
+
+        res.json({
+            serviceName: magicLink.credential.serviceName,
+            username: magicLink.credential.username,
+            password: decryptedPassword,
+            notes: magicLink.credential.notes
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
     console.log(`Sistema SaaS ONLINE en puerto ${PORT} 🚀`);
