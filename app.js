@@ -738,26 +738,21 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
     }
 });
 // OBTENER HISTORIAL DE AUDITORÍA (LOGS)
+// Ruta para obtener el historial filtrado
 app.get('/api/audit-logs', verifyToken, async (req, res) => {
     try {
-        // Buscamos los logs de credenciales que pertenecen a clientes de TU agencia
-        const logs = await prisma.credentialLog.findMany({
+        const logs = await prisma.auditLog.findMany({
             where: {
-                credential: {
-                    client: {
-                        agencyId: req.user.agencyId
-                    }
+                agencyId: req.user.agencyId,
+                // Agregamos el filtro de rol si tu tabla de logs tiene esa info
+                // O filtramos por la relación con el usuario:
+                user: {
+                    role: 'EMPLOYEE' // <--- SOLO EMPLEADOS
                 }
             },
-            include: {
-                credential: true // Para saber el nombre del servicio (Facebook, etc)
-            },
-            orderBy: {
-                createdAt: 'desc' // Los más recientes primero
-            },
-            take: 50 // Mostramos los últimos 50 movimientos
+            include: { credential: true },
+            orderBy: { createdAt: 'desc' }
         });
-
         res.json(logs);
     } catch (error) {
         res.status(500).json({ error: error.message });
