@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  // Esto ayuda a reducir memoria en la generaci«Ñn
-  engineType = "binary"
+  engineType = "library" 
 }
 
 datasource db {
@@ -83,14 +82,15 @@ model Credential {
 
 model CredentialLog {
   id           String     @id @default(uuid())
-  action       String     // Ej: VIEWED, COPIED, SHARED_LINK_CREATED
-  userEmail    String     // Quién lo hizo (puede ser Admin, Agencia o Empleado)
+  action       String     // Ej: VIEWED, COPIED
+  userEmail    String     // Persiste aunque el usuario sea borrado
+  userRole     String?    // Guardamos "EMPLOYEE" o "ADMIN" como texto fijo
+  agencyId     String?    // Para filtrar por agencia
   ipAddress    String?
   credentialId String
   credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
 }
-
 model MagicLink {
   id           String     @id @default(uuid())
   token        String     @unique
