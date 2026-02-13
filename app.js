@@ -296,9 +296,11 @@ app.get('/api/audit-logs', verifyToken, async (req, res) => {
         const logs = await prisma.auditLog.findMany({
             where: {
                 agencyId: req.user.agencyId,
-                userRole: 'EMPLOYEE' // Solo empleados ven esto
+                userRole: 'EMPLOYEE' // <--- Filtramos directamente por el campo userRole
             },
-            include: { credential: { select: { serviceName: true } } },
+            include: { 
+                credential: { select: { serviceName: true } } 
+            },
             orderBy: { createdAt: 'desc' }
         });
         res.json(logs);
