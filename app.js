@@ -273,14 +273,15 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
-        await prisma.credentialLog.create({
-            data: {
-                action: 'VIEW_REVEALED',
-                userEmail: req.user.email || 'Usuario',
-                ipAddress: req.ip,
-                credentialId: id
-            }
-        });
+        await prisma.auditLog.create({
+    data: {
+        credentialId: id,
+        userEmail: req.user.email, // <--- Guardamos el email como STRING permanente
+        userId: req.user.id,        // ID opcional para relación
+        ipAddress: req.ip,
+        agencyId: req.user.agencyId
+    }
+});
 
         res.json({ password: decryptedPassword });
     } catch (error) {
