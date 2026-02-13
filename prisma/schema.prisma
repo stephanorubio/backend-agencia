@@ -100,3 +100,13 @@ model MagicLink {
   used         Boolean    @default(false)
   createdAt    DateTime   @default(now())
 }
+model AuditLog {
+  id           String     @id @default(uuid())
+  userEmail    String     // Persiste aunque el usuario sea borrado
+  userRole     String?    // Para filtrar solo empleados
+  ipAddress    String?
+  credentialId String
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  agencyId     String?    // ID de la agencia para filtrar
+  createdAt    DateTime   @default(now())
+}
