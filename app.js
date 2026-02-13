@@ -788,30 +788,56 @@ app.delete('/api/credentials/:id', verifyToken, async (req, res) => {
         res.json({ message: 'Credencial eliminada' });
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
-// --- 1. EDITAR EMPLEADO ---
+// --- ACTUALIZAR EMPLEADO (CORREGIDO) ---
 app.put('/api/employees/:id', verifyToken, async (req, res) => {
     try {
+        const { id } = req.params;
         const { name, email, role, password } = req.body;
-        let updateData = { name, email, role };
-        
-        if (password && password.trim() !== "") {
+
+        // Buscamos al empleado primero
+        const employee = await prisma.employee.findUnique({ where: { id } });
+        if (!employee) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+        // VALIDACIÓN DE SEGURIDAD: 
+        // Solo permitimos si es el dueño de la misma agencia O si es SUPER_ADMIN
+        if (req.user.role !== 'SUPER_ADMIN' && employee.agencyId !== req.user.agencyId) {
+            return res.status(403).json({ error: 'No tienes permiso para editar este empleado' });
+        }
+
+        const updateData = { name, email, role };
+        if (password) {
             updateData.password = await bcrypt.hash(password, 10);
         }
 
-        await prisma.employee.update({
-            where: { id: req.params.id },
+        const updated = await prisma.employee.update({
+            where: { id },
             data: updateData
         });
-        res.json({ message: 'Empleado actualizado' });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+
+        res.json({ message: 'Empleado actualizado', updated });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// --- 2. BORRAR EMPLEADO ---
-app.delete('/api/employees/:id', verifyToken, async (req, res) => {
+// --- ELIMINAR EMPLEADO (CORREGIDO) ---
+app.post('/api/employees/:id/delete', verifyToken, async (req, res) => { // O app.delete si usas ese método
     try {
-        await prisma.employee.delete({ where: { id: req.params.id } });
-        res.json({ message: 'Empleado eliminado' });
-    } catch (error) { res.status(500).json({ error: error.message }); }
+        const { id } = req.params;
+
+        const employee = await prisma.employee.findUnique({ where: { id } });
+        if (!employee) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+        // VALIDACIÓN DE SEGURIDAD:
+        if (req.user.role !== 'SUPER_ADMIN' && employee.agencyId !== req.user.agencyId) {
+            return res.status(403).json({ error: 'No tienes permiso para eliminar este empleado' });
+        }
+
+        await prisma.employee.delete({ where: { id } });
+        res.json({ message: 'Empleado eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // --- 3. DESBLOQUEO SEGURO CON LOG DE VISITAS ---
