@@ -272,30 +272,31 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
-        // CREAR LOG PERSISTENTE
-        await prisma.auditLog.create({
+        // REGISTRO DE HISTORIAL PERMANENTE
+        await prisma.credentialLog.create({
             data: {
-                credentialId: id,
+                action: 'VIEWED',
                 userEmail: req.user.email,
-                userRole: req.user.role, // Guardamos el rol para filtrar después
+                userRole: req.user.role,   // Guardamos el rol como texto
+                agencyId: req.user.agencyId,
                 ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-                agencyId: req.user.agencyId
+                credentialId: id
             }
         });
 
         res.json({ password: decryptedPassword });
     } catch (error) {
-        res.status(500).json({ error: 'Fallo al descifrar' });
+        res.status(500).json({ error: 'Error al descifrar' });
     }
 });
 
 // --- OBTENER HISTORIAL FILTRADO (SOLO EMPLEADOS) ---
 app.get('/api/audit-logs', verifyToken, async (req, res) => {
     try {
-        const logs = await prisma.auditLog.findMany({
+        const logs = await prisma.credentialLog.findMany({
             where: {
                 agencyId: req.user.agencyId,
-                userRole: 'EMPLOYEE' // <--- FILTRO SOLICITADO
+                userRole: 'EMPLOYEE' // <--- Solo muestra empleados, no admins
             },
             include: { credential: { select: { serviceName: true } } },
             orderBy: { createdAt: 'desc' }
