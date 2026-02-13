@@ -263,7 +263,7 @@ app.get('/api/clients/:clientId/credentials', verifyToken, async (req, res) => {
     }
 });
 
-// 3. --- REVELAR CONTRASEÑA (CORREGIDO) ---
+// --- 1. REVELAR CONTRASEÑA (CORREGIDO) ---
 app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -273,12 +273,12 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
-        // REGISTRO DE HISTORIAL (Corregido según tu nuevo schema)
+        // REGISTRO DE HISTORIAL (Usando campos exactos del schema)
         await prisma.auditLog.create({
             data: {
                 credentialId: id,
-                userEmail: req.user.email, // Guardamos el email como string permanente
-                userRole: req.user.role,   // VITAL: Guardamos el rol para filtrar después
+                userEmail: req.user.email,
+                userRole: req.user.role,   // Guardamos el rol para filtrar después
                 ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
                 agencyId: req.user.agencyId
             }
@@ -286,17 +286,19 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         res.json({ password: decryptedPassword });
     } catch (error) {
+        // Si hay un error de DB o desencriptado, lo veremos en los logs de Render
+        console.error("Error reveal:", error);
         res.status(500).json({ error: 'Error al procesar la solicitud' });
     }
 });
 
-// --- HISTORIAL FILTRADO (SOLO EMPLEADOS) ---
+// --- 2. HISTORIAL FILTRADO (CORREGIDO) ---
 app.get('/api/audit-logs', verifyToken, async (req, res) => {
     try {
         const logs = await prisma.auditLog.findMany({
             where: {
                 agencyId: req.user.agencyId,
-                userRole: 'EMPLOYEE' // <--- Filtramos directamente por el campo userRole
+                userRole: 'EMPLOYEE' // Filtramos directamente por el campo userRole
             },
             include: { 
                 credential: { select: { serviceName: true } } 
@@ -308,7 +310,6 @@ app.get('/api/audit-logs', verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
 // 4. GENERAR LINK TEMPORAL
 app.post('/api/credentials/:id/share', verifyToken, async (req, res) => {
     try {
