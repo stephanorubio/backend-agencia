@@ -6,6 +6,9 @@
     "start": "node app.js",
     "postinstall": "prisma generate" 
   },
+  "engines": {
+  "node": "20.x"
+},
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
