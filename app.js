@@ -580,19 +580,34 @@ app.get('/api/emergency-fix', async (req, res) => {
 //  GESTIÓN DE EMPLEADOS (STAFF)
 // ==========================================
 
-// 1. CREAR EMPLEADO (Solo la Agencia puede hacerlo)
+// 1. CREAR EMPLEADO (Versión corregida para Modo Supervisión)
 app.post('/api/employees', verifyToken, async (req, res) => {
     try {
-        const { name, cedula, email, password, role } = req.body;
+        // Extraemos agencyId del cuerpo de la petición (enviado por el frontend)
+        const { name, cedula, email, password, role, agencyId } = req.body;
         
-        // Encriptar contraseña del empleado
+        // Lógica de asignación:
+        // Si el usuario es Super Admin y envió un agencyId, usamos ese.
+        // Si no, usamos el agencyId que viene en su token de sesión.
+        let targetAgencyId = req.user.agencyId;
+        if (req.user.role === 'SUPER_ADMIN' && agencyId) {
+            targetAgencyId = agencyId;
+        }
+
+        if (!targetAgencyId) {
+            return res.status(400).json({ error: 'No se pudo determinar la agencia para este empleado.' });
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        const newEmployee = await prisma.employee.create({
+        await prisma.employee.create({
             data: {
-                name, cedula, email, role,
+                name, 
+                cedula, 
+                email, 
+                role,
                 password: hashedPassword,
-                agencyId: req.user.agencyId
+                agencyId: targetAgencyId // <--- Ahora se asigna correctamente
             }
         });
         
