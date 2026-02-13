@@ -263,29 +263,46 @@ app.get('/api/clients/:clientId/credentials', verifyToken, async (req, res) => {
     }
 });
 
-// 3. REVELAR CONTRASEÑA
+// 3. --- REVELAR CONTRASEÑA (CORREGIDO) ---
 app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
         const cred = await prisma.credential.findUnique({ where: { id } });
-
         if (!cred) return res.status(404).json({ error: 'No encontrado' });
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
+        // CREAR LOG PERSISTENTE
         await prisma.auditLog.create({
-    data: {
-        credentialId: id,
-        userEmail: req.user.email, // <--- Guardamos el email como STRING permanente
-        userId: req.user.id,        // ID opcional para relación
-        ipAddress: req.ip,
-        agencyId: req.user.agencyId
-    }
-});
+            data: {
+                credentialId: id,
+                userEmail: req.user.email,
+                userRole: req.user.role, // Guardamos el rol para filtrar después
+                ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+                agencyId: req.user.agencyId
+            }
+        });
 
         res.json({ password: decryptedPassword });
     } catch (error) {
-        res.status(500).json({ error: 'Error de desencriptado' });
+        res.status(500).json({ error: 'Fallo al descifrar' });
+    }
+});
+
+// --- OBTENER HISTORIAL FILTRADO (SOLO EMPLEADOS) ---
+app.get('/api/audit-logs', verifyToken, async (req, res) => {
+    try {
+        const logs = await prisma.auditLog.findMany({
+            where: {
+                agencyId: req.user.agencyId,
+                userRole: 'EMPLOYEE' // <--- FILTRO SOLICITADO
+            },
+            include: { credential: { select: { serviceName: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
