@@ -268,16 +268,17 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
         const cred = await prisma.credential.findUnique({ where: { id } });
+
         if (!cred) return res.status(404).json({ error: 'No encontrado' });
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
-        // REGISTRO EN AUDITLOG (Inmutable)
+        // REGISTRO DE HISTORIAL (Corregido según tu nuevo schema)
         await prisma.auditLog.create({
             data: {
                 credentialId: id,
-                userEmail: req.user.email,
-                userRole: req.user.role, // Guardamos el rol para filtrar
+                userEmail: req.user.email, // Guardamos el email como string permanente
+                userRole: req.user.role,   // VITAL: Guardamos el rol para filtrar después
                 ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
                 agencyId: req.user.agencyId
             }
@@ -285,7 +286,7 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         res.json({ password: decryptedPassword });
     } catch (error) {
-        res.status(500).json({ error: 'Error al descifrar' });
+        res.status(500).json({ error: 'Error al procesar la solicitud' });
     }
 });
 
