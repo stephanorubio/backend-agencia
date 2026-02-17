@@ -309,7 +309,8 @@ app.post('/api/credentials/:id/share', verifyToken, async (req, res) => {
             }
         });
 
-        res.json({ link: `https://api-agencia-0smc.onrender.com/secure_view.html?token=${token}` });
+// Quitamos el .html para que se vea más profesional y "encriptado"
+res.json({ link: `https://api-agencia-0smc.onrender.com/secure_view?token=${token}` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -604,11 +605,50 @@ app.post('/api/employees', verifyToken, async (req, res) => {
 // 2. LISTAR EMPLEADOS
 app.get('/api/employees', verifyToken, async (req, res) => {
     try {
+        // Prioridad 1: agencyId que viene en el query (para Super Admin "viendo como")
+        // Prioridad 2: agencyId del token del usuario
+        const targetAgencyId = req.query.agencyId || req.user.agencyId;
+
+        if (!targetAgencyId) return res.status(400).json({ error: "No se especificó la agencia" });
+
         const employees = await prisma.employee.findMany({
-            where: { agencyId: req.user.agencyId },
+            where: { agencyId: targetAgencyId },
             select: { id: true, name: true, email: true, role: true, cedula: true }
         });
         res.json(employees);
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// 3. EDITAR EMPLEADO (O Resetear Clave)
+app.put('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, role, password } = req.body;
+        
+        let updateData = { name, email, role };
+
+        // Si se envió una nueva contraseña, la encriptamos antes de guardar
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await prisma.employee.update({
+            where: { id },
+            data: updateData
+        });
+
+        res.json({ message: 'Empleado actualizado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. ELIMINAR EMPLEADO
+app.delete('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma.employee.delete({ where: { id } });
+        res.json({ message: 'Empleado eliminado' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -662,13 +702,13 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
 
         // AUDITORÍA: Registrar QUÉ empleado vio la clave
         await prisma.credentialLog.create({
-            data: {
-                action: 'ACCESSED_BY_EMPLOYEE',
-                userEmail: `${req.user.name} (${req.user.email})`, 
-                ipAddress: req.ip,
-                credentialId: magicLink.credentialId
-            }
-        });
+    data: {
+        action: 'ACCESSED_BY_EMPLOYEE',
+        userEmail: `${req.user.name} (${req.user.email})`, 
+        ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+        credentialId: magicLink.credentialId // <-- Verifica que este ID exista
+    }
+});
 
         res.json({
             serviceName: magicLink.credential.serviceName,
@@ -680,6 +720,117 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+// OBTENER HISTORIAL DE AUDITORÍA (LOGS)
+app.get('/api/audit-logs', verifyToken, async (req, res) => {
+    try {
+        // Buscamos los logs de credenciales que pertenecen a clientes de TU agencia
+        const logs = await prisma.credentialLog.findMany({
+            where: {
+                credential: {
+                    client: {
+                        agencyId: req.user.agencyId
+                    }
+                }
+            },
+            include: {
+                credential: true // Para saber el nombre del servicio (Facebook, etc)
+            },
+            orderBy: {
+                createdAt: 'desc' // Los más recientes primero
+            },
+            take: 50 // Mostramos los últimos 50 movimientos
+        });
+
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+// EDITAR CREDENCIAL
+app.put('/api/credentials/:id', verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { serviceName, type, username, password, notes } = req.body;
+        
+        // Si hay password nueva, re-encriptamos
+        let updateData = { serviceName, type, username, notes };
+        if (password) {
+            const { encryptedData, iv } = encrypt(password);
+            updateData.encryptedData = encryptedData;
+            updateData.iv = iv;
+        }
+
+        await prisma.credential.update({ where: { id }, data: updateData });
+        res.json({ message: 'Credencial actualizada' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// BORRAR CREDENCIAL
+app.delete('/api/credentials/:id', verifyToken, async (req, res) => {
+    try {
+        await prisma.credential.delete({ where: { id: req.params.id } });
+        res.json({ message: 'Credencial eliminada' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+// --- 1. EDITAR EMPLEADO ---
+app.put('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        const { name, email, role, password } = req.body;
+        let updateData = { name, email, role };
+        
+        if (password && password.trim() !== "") {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await prisma.employee.update({
+            where: { id: req.params.id },
+            data: updateData
+        });
+        res.json({ message: 'Empleado actualizado' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// --- 2. BORRAR EMPLEADO ---
+app.delete('/api/employees/:id', verifyToken, async (req, res) => {
+    try {
+        await prisma.employee.delete({ where: { id: req.params.id } });
+        res.json({ message: 'Empleado eliminado' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// --- 3. DESBLOQUEO SEGURO CON LOG DE VISITAS ---
+// Reemplaza el app.get('/api/magic-link/:token') por este POST:
+app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
+    try {
+        const magicLink = await prisma.magicLink.findUnique({
+            where: { token: req.params.token },
+            include: { credential: true }
+        });
+
+        if (!magicLink || magicLink.expiresAt < new Date()) {
+            return res.status(403).json({ error: 'Enlace inválido o expirado' });
+        }
+
+        const decryptedPassword = decrypt(magicLink.credential.encryptedData, magicLink.credential.iv);
+
+        // AQUÍ SE GUARDA EL HISTORIAL REAL
+        await prisma.credentialLog.create({
+            data: {
+                action: 'ACCESSED_BY_EMPLOYEE',
+                userEmail: `${req.user.name} (${req.user.email})`, 
+                ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+                credentialId: magicLink.credentialId
+            }
+        });
+
+        res.json({
+            serviceName: magicLink.credential.serviceName,
+            username: magicLink.credential.username,
+            password: decryptedPassword,
+            notes: magicLink.credential.notes
+        });
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 // INICIAR SERVIDOR
 app.listen(PORT, () => {
