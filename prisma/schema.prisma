@@ -1,7 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-  // CAMBIO VITAL: Usamos library para evitar errores en Render
-  engineType = "library" 
+  // Esto ayuda a reducir memoria en la generaci«Ñn
+  engineType = "binary"
 }
 
 datasource db {
@@ -12,12 +12,13 @@ datasource db {
 model Agency {
   id        String   @id @default(uuid())
   name      String
-  logo      String?  @db.Text
+  logo      String?  @db.Text  
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   users     User[]
   clients   Client[]
-  employees Employee[]
+  wallet    Wallet?
+  employees      Employee[]
 }
 
 model Employee {
@@ -41,10 +42,17 @@ model User {
   agency    Agency   @relation(fields: [agencyId], references: [id])
 }
 
+model Wallet {
+  id        String   @id @default(uuid())
+  balance   Decimal  @default(0.00)
+  agencyId  String   @unique
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+}
+
 model Client {
   id          String   @id @default(uuid())
   name        String
-  logo        String?  @db.Text
+  logo        String?  @db.Text  
   contactName String?
   email       String?
   adAccountId String?
@@ -53,31 +61,33 @@ model Client {
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
   createdAt   DateTime @default(now())
+  
 }
+// --- GESTOR DE CONTRASEÑAS (WALLET) ---
 
 model Credential {
   id             String   @id @default(uuid())
-  serviceName    String   
-  type           String   
+  serviceName    String   // Ej: Facebook Ads, Gmail, cPanel
+  type           String   // Ej: SOCIAL, SERVER, EMAIL, API
   username       String?
-  encryptedData  String   @db.Text 
-  iv             String   
+  // DATOS ENCRIPTADOS
+  encryptedData  String   @db.Text // La contraseña encriptada
+  iv             String   // Vector de inicialización (necesario para desencriptar)
   notes          String?
   clientId       String
   client         Client   @relation(fields: [clientId], references: [id])
+  logs           CredentialLog[]
   createdAt      DateTime @default(now())
-  magicLinks     MagicLink[]
-  auditLogs      AuditLog[] // Relación con el nuevo historial
+  magicLinks    MagicLink[]
 }
 
-model AuditLog {
+model CredentialLog {
   id           String     @id @default(uuid())
-  userEmail    String     // Persiste el nombre aunque se borre el empleado
-  userRole     String?    // Para filtrar solo empleados
+  action       String     // Ej: VIEWED, COPIED, SHARED_LINK_CREATED
+  userEmail    String     // Quién lo hizo (puede ser Admin, Agencia o Empleado)
   ipAddress    String?
   credentialId String
   credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  agencyId     String?    
   createdAt    DateTime   @default(now())
 }
 
@@ -85,7 +95,7 @@ model MagicLink {
   id           String     @id @default(uuid())
   token        String     @unique
   credentialId String
-  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade) // <--- AGREGAR ESTA LÍNEA
   expiresAt    DateTime
   used         Boolean    @default(false)
   createdAt    DateTime   @default(now())
