@@ -518,11 +518,20 @@ app.get('/api/agency/me', verifyToken, async (req, res) => {
 // 1. CREAR EMPLEADO
 app.post('/api/employees', verifyToken, async (req, res) => {
     try {
-        const { name, cedula, email, password, role } = req.body;
+        const { name, cedula, email, password, role, agencyId: bodyAgencyId } = req.body;
+
+        // SUPER_ADMIN en modo fantasma envía agencyId en el body
+        let agencyId = req.user.agencyId;
+        if (req.user.role === 'SUPER_ADMIN' && bodyAgencyId) {
+            agencyId = bodyAgencyId;
+        }
+
+        if (!agencyId) return res.status(400).json({ error: 'No se pudo determinar la agencia' });
+
         const hashedPassword = await bcrypt.hash(password, 10);
 
         await prisma.employee.create({
-            data: { name, cedula, email, role, password: hashedPassword, agencyId: req.user.agencyId }
+            data: { name, cedula, email, role, password: hashedPassword, agencyId }
         });
 
         res.json({ message: 'Empleado creado exitosamente' });
