@@ -218,11 +218,12 @@ app.post('/api/credentials/:id/reveal', verifyToken, async (req, res) => {
 
         const decryptedPassword = decrypt(cred.encryptedData, cred.iv);
 
+        const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '').split(',')[0].trim();
         await prisma.credentialLog.create({
             data: {
                 action: 'VIEW_REVEALED',
                 userEmail: req.user.email || 'Usuario',
-                ipAddress: req.ip,
+                ipAddress: ip,
                 credentialId: id
             }
         });
@@ -650,15 +651,21 @@ app.post('/api/magic-link/:token/unlock', verifyToken, async (req, res) => {
 
 app.get('/api/audit-logs', verifyToken, async (req, res) => {
     try {
+        // SUPER_ADMIN en modo fantasma pasa agencyId como query param
+        let targetAgencyId = req.user.agencyId;
+        if (req.user.role === 'SUPER_ADMIN' && req.query.agencyId) {
+            targetAgencyId = req.query.agencyId;
+        }
+
         const logs = await prisma.credentialLog.findMany({
             where: {
                 credential: {
-                    client: { agencyId: req.user.agencyId }
+                    client: { agencyId: targetAgencyId }
                 }
             },
-            include: { credential: true },
+            include: { credential: { select: { serviceName: true } } },
             orderBy: { createdAt: 'desc' },
-            take: 50
+            take: 100
         });
         res.json(logs);
     } catch (error) {
