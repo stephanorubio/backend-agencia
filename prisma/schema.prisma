@@ -25,12 +25,14 @@ model Employee {
   id        String   @id @default(uuid())
   name      String
   cedula    String?
-  email     String   @unique
+  email     String
   password  String
   role      String   @default("VIEWER")
   agencyId  String
   agency    Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@unique([email, agencyId])
 }
 
 model User {
